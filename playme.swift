@@ -26,6 +26,18 @@ if CommandLine.arguments.count == 1 {
     exit(0)
 }
 
+var debugEnabled = CommandLine.arguments.count == 3 && (CommandLine.arguments[2] == "--debug" || CommandLine.arguments[1] == "--debug")
+
+func debug(_ message: @autoclosure () -> String) {
+    guard debugEnabled else { return }
+    print("[DEBUG]", message())
+}
+
+func doDebug(actions: () -> ()) {
+    guard debugEnabled else { return }
+    actions()
+}
+
 // validate input file
 
 var playground = CommandLine.arguments[1]
@@ -78,6 +90,30 @@ let sourceFiles = getSourceFiles()
 // find out code and markdown blocks
 // and output the markdown text
 
+extension String {
+    
+    func strippingLeadingSpacesForHeaders() -> String {
+        guard let regex = try? NSRegularExpression.init(pattern: "^(\\s*)(#+)", options: .caseInsensitive) else { return self }
+        if let match = regex.firstMatch(in: self, options: .withoutAnchoringBounds, range: .init(location: 0, length: characters.count)) {
+            guard match.numberOfRanges == 3 else { return self }
+            let whitespaceCount = match.rangeAt(1).length
+            return substring(from: index(startIndex, offsetBy: whitespaceCount))
+        }
+        return self
+    }
+    
+    func strippingLeadingPattern(_ pattern: String) -> String {
+        guard let regex = try? NSRegularExpression.init(pattern: pattern, options: .caseInsensitive) else { return self }
+        if let match = regex.firstMatch(in: self, options: .withoutAnchoringBounds, range: .init(location: 0, length: characters.count)) {
+            guard match.numberOfRanges >= 2 else { return self }
+            let count = match.rangeAt(1).length
+            return substring(from: index(startIndex, offsetBy: count))
+        }
+        return self
+    }
+
+}
+
 enum Token {
     
     case code(String)
@@ -110,9 +146,9 @@ enum Token {
     var text: String {
         switch self {
         case let .code(code):               return code
-        case let .markdownLine(text):       return text.substring(from: text.index(text.startIndex, offsetBy: 3))
+        case let .markdownLine(text):       return text.strippingLeadingPattern("(//:)").strippingLeadingSpacesForHeaders()
         case .markdownBlockStart:           return ""
-        case let .markdownBlockLine(text): 	return text
+        case let .markdownBlockLine(text): 	return text.strippingLeadingSpacesForHeaders()
         case .markdownBlockEnd:             return ""
         case .newline:                      return "\n"
         }
@@ -132,7 +168,7 @@ func convertToMarkdown(file: String) -> [String] {
     for line in contents.components(separatedBy: "\n") {
         
         // skip special lines
-        if line.contains("@previous") || line.contains("@next") {
+        if line.contains("(@previous)") || line.contains("(@next)") {
             continue
         }
         
@@ -140,10 +176,11 @@ func convertToMarkdown(file: String) -> [String] {
         if !inMarkdownBlock && line.hasPrefix("//:") {
             tokens.append(.markdownLine(line))
         }
-        else if line == "/*:" {
+        else if line.hasPrefix("/*:") {
             tokens.append(.markdownBlockStart)
             inMarkdownBlock = true
         }
+        // very basic end block detection
         else if line == "*/" {
             tokens.append(.markdownBlockEnd)
             inMarkdownBlock = false
@@ -168,6 +205,16 @@ func convertToMarkdown(file: String) -> [String] {
         tokens.removeLast()
     }
     tokens.append(.newline)
+
+    doDebug {
+        debug("-------------")
+        debug("FILE: \(file)")
+        debug("TOKENS -------------")
+        tokens.enumerated().forEach { index, token in
+            debug("\(index) \(token.description)")
+        }
+        debug("END -------------")
+    }
 
     enum BlockType {
         case markdown(start:Int, end:Int)
@@ -234,6 +281,16 @@ func convertToMarkdown(file: String) -> [String] {
     }
     
     let blocks = findBlocks(tokens: tokens)
+
+    doDebug {
+        debug("BLOCKS -------------")
+        blocks.forEach {
+            debug("\($0)")
+        }
+        debug("END BLOCKS -------------")
+        debug("END FILE: \(file)")
+        debug("-------------")
+    }
     
     var lines = [String]()
     
