@@ -13,6 +13,12 @@ chmod +x playme.swift
 ./playme.swift path_to_your_playground
 ```
 
+Alternatively
+
+```
+swift playme.swift path_to_your_playground
+```
+
 playme will print converted markdown to the terminal. Redirect its output to a file of your choice. E.g.
 
 ```
