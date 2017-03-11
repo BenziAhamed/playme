@@ -22,11 +22,16 @@ func error(_ message: @autoclosure () -> String) -> Never  {
 if CommandLine.arguments.count == 1 {
     print("playme v1.0")
     print("    convert playgrounds to markdown")
-    print("usage: playme path_to_playground")
+    print("usage: playme path_to_playground (--toc)")
+    print("")
+    print("--toc       prints a GitHub compatible TOC at the start")
     exit(0)
 }
 
-var debugEnabled = CommandLine.arguments.count == 3 && (CommandLine.arguments[2] == "--debug" || CommandLine.arguments[1] == "--debug")
+let command = CommandLine.arguments.joined(separator: " ")
+let debugEnabled = command.contains(" --debug")
+let skipConversion = command.contains(" --skip")
+let generateTOC = command.contains(" --toc")
 
 func debug(_ message: @autoclosure () -> String) {
     guard debugEnabled else { return }
@@ -114,6 +119,33 @@ extension String {
 
 }
 
+
+struct TocEntry {
+    let level: Int
+    let text: String
+}
+
+extension String {
+    func getTocEntry() -> TocEntry? {
+        guard
+            let regex = try? NSRegularExpression.init(pattern: "^(\\s*)(#+)", options: .caseInsensitive),
+            let match = regex.firstMatch(in: self, options: .withoutAnchoringBounds, range: .init(location: 0, length: characters.count))
+        else { return nil }
+        let level = match.rangeAt(2).length
+        let header = substring(from: index(startIndex, offsetBy: match.range.length))
+        return TocEntry(level: level, text: header)
+    }
+    
+    func trim() -> String {
+        return self.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    
+    func kebabCase() -> String {
+        return self.components(separatedBy: " ").joined(separator: "-")
+    }
+}
+
+
 enum Token {
     
     case code(String)
@@ -136,7 +168,7 @@ enum Token {
         switch self {
         case let .code(code):                   return "CODE: \(code)"
         case let .markdownLine(text):           return "  MD: \(text)"
-        case let .markdownBlockLine(text):      return "blMD: \(text)"
+        case let .markdownBlockLine(text):      return "..MD: \(text)"
         case .markdownBlockStart:               return "++MD:"
         case .markdownBlockEnd:                 return "--MD:"
         case .newline:                          return "  NL:"
@@ -155,7 +187,16 @@ enum Token {
     }
 }
 
+
+var tocEntries = [TocEntry]()
+
+func checkTocEntry(_ token: Token) {
+    guard let tocEntry = token.text.getTocEntry() else { return }
+    tocEntries.append(tocEntry)
+}
+
 func convertToMarkdown(file: String) -> [String] {
+
     let data = fm.contents(atPath: file)!
     let contents = String.init(data: data, encoding: String.Encoding.utf8)!
     
@@ -164,17 +205,19 @@ func convertToMarkdown(file: String) -> [String] {
     
     // determine the kind of line
     // we are looking at
-    
+
     for line in contents.components(separatedBy: "\n") {
         
         // skip special lines
         if line.contains("(@previous)") || line.contains("(@next)") {
             continue
         }
-        
+
         // standalone line
         if !inMarkdownBlock && line.hasPrefix("//:") {
-            tokens.append(.markdownLine(line))
+            let token = Token.markdownLine(line)
+            tokens.append(token)
+            checkTocEntry(token)
         }
         else if line.hasPrefix("/*:") {
             tokens.append(.markdownBlockStart)
@@ -190,7 +233,9 @@ func convertToMarkdown(file: String) -> [String] {
         }
         else {
             if inMarkdownBlock {
-                tokens.append(.markdownBlockLine(line))
+                let token = Token.markdownBlockLine(line)
+                tokens.append(token)
+                checkTocEntry(token)
             }
             else {
                 tokens.append(.code(line))
@@ -213,7 +258,7 @@ func convertToMarkdown(file: String) -> [String] {
         tokens.enumerated().forEach { index, token in
             debug("\(index) \(token.description)")
         }
-        debug("END -------------")
+        debug("END TOKENS -------------")
     }
 
     enum BlockType {
@@ -314,17 +359,30 @@ func convertToMarkdown(file: String) -> [String] {
 }
 
 
-sourceFiles.forEach {
-    let convertedLines = convertToMarkdown(file: $0)
-    convertedLines.forEach { 
-        if $0 == "\n" {
-            print($0, separator: "", terminator: "")
-        }
-        else {
-            print($0) 
-        }
+var allConvertedLines = [String]()
+sourceFiles.forEach { allConvertedLines.append(contentsOf: convertToMarkdown(file: $0)) }
+
+
+if generateTOC {
+    print("# Contents")
+    tocEntries.forEach { tocEntry in
+        let headingBulletLevel = String.init(repeating: " ", count: 4 * (tocEntry.level-1))
+        // let headingBulletLevel = String.init(repeating: "\t", count: tocEntry.level-1)
+        let header = tocEntry.text.trim()
+        let link = header.kebabCase().lowercased()
+        print("\(headingBulletLevel)- [\(header)](#\(link))")
     }
 }
 
 
+guard !skipConversion else { exit(0) }
+    
+allConvertedLines.forEach { 
+    if $0 == "\n" {
+        print($0, separator: "", terminator: "")
+    }
+    else {
+        print($0) 
+    }
+}
 
