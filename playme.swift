@@ -315,8 +315,14 @@ func convertToMarkdown(file: String) -> [String] {
 
 
 sourceFiles.forEach {
-    convertToMarkdown(file: $0).forEach {
-        print($0)
+    let convertedLines = convertToMarkdown(file: $0)
+    convertedLines.forEach { 
+        if $0 == "\n" {
+            print($0, separator: "", terminator: "")
+        }
+        else {
+            print($0) 
+        }
     }
 }
 
