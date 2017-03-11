@@ -181,7 +181,7 @@ func convertToMarkdown(file: String) -> [String] {
             inMarkdownBlock = true
         }
         // very basic end block detection
-        else if line == "*/" {
+        else if line == "*/" || line == " */" || line == "  */" {
             tokens.append(.markdownBlockEnd)
             inMarkdownBlock = false
         }
