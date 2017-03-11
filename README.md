@@ -24,3 +24,13 @@ playme will print converted markdown to the terminal. Redirect its output to a f
 ```sh
 ./playme.swift path_to_your_playground > README.md
 ```
+
+### Extras
+
+You can pass in `--toc` to generate a table of contents compatible with GitHub.
+
+```sh
+./playme.swift path_to_your_playground --toc
+```
+
+The table of contents will be the first section in the output.
