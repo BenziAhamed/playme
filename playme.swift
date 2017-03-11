@@ -32,6 +32,7 @@ let command = CommandLine.arguments.joined(separator: " ")
 let debugEnabled = command.contains(" --debug")
 let skipConversion = command.contains(" --skip")
 let generateTOC = command.contains(" --toc")
+let noCredits = command.contains(" --no-credits")
 
 func debug(_ message: @autoclosure () -> String) {
     guard debugEnabled else { return }
@@ -195,6 +196,8 @@ func checkTocEntry(_ token: Token) {
     tocEntries.append(tocEntry)
 }
 
+var tocInsertionPointDiscovered = false
+
 func convertToMarkdown(file: String) -> [String] {
 
     let data = fm.contents(atPath: file)!
@@ -207,6 +210,10 @@ func convertToMarkdown(file: String) -> [String] {
     // we are looking at
 
     for line in contents.components(separatedBy: "\n") {
+
+        if !tocInsertionPointDiscovered {
+            tocInsertionPointDiscovered = line.contains("{{GEN:TOC}}")
+        }
         
         // skip special lines
         if line.contains("(@previous)") || line.contains("(@next)") {
@@ -363,7 +370,17 @@ var allConvertedLines = [String]()
 sourceFiles.forEach { allConvertedLines.append(contentsOf: convertToMarkdown(file: $0)) }
 
 
-if generateTOC {
+
+// print toc at beginning only if we have no specific 
+// insertion location
+
+var tocPrinted = false
+func printTOC() {
+    guard generateTOC else { return }
+    guard tocEntries.count > 0 else { return }
+    guard !tocPrinted else  { return }
+    tocPrinted = true
+
     print("# Contents")
     tocEntries.forEach { tocEntry in
         let headingBulletLevel = String.init(repeating: " ", count: 4 * (tocEntry.level-1))
@@ -374,6 +391,9 @@ if generateTOC {
     }
 }
 
+if !tocInsertionPointDiscovered || (skipConversion && generateTOC) {
+    printTOC()
+}
 
 guard !skipConversion else { exit(0) }
     
@@ -381,8 +401,15 @@ allConvertedLines.forEach {
     if $0 == "\n" {
         print($0, separator: "", terminator: "")
     }
+    else if $0.contains("{{GEN:TOC}}") {
+        printTOC()
+    }
     else {
         print($0) 
     }
+}
+
+if !noCredits {
+    print("> This README was auto-generated using [playme](https://github.com/BenziAhamed/playme)")
 }
 
