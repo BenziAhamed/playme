@@ -28,11 +28,18 @@ playme will print converted markdown to the terminal. Redirect its output to a f
 ## Usage
 
 ```
-  usage: playme path_to_playground [--toc [--toc-top]] [--no-credits]
+usage: playme path_to_playground [--toc [--toc-top]] [--no-credits] [update [--check]]
 
-  --toc          generate a GitHub compatible TOC at the beginning of the document
-  --toc-top      generate back to top links before relevant headers
-  --no-credits   prevent appending credits text at the end
+--toc          generate a GitHub compatible TOC at the beginning of the document
+--toc-top      generate back to top links before relevant headers
+--no-credits   prevent appending credits text at the end
+
+update         updates playme to the latest version
+--check        run update availability checks, but does not update
+
+--help         prints usage
+
+visit https://github.com/BenziAhamed/playme
 ```
 
 ## Extras
