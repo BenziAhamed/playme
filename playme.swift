@@ -20,11 +20,16 @@ func error(_ message: @autoclosure () -> String) -> Never  {
 // validate usage
 
 if CommandLine.arguments.count == 1 {
-    print("playme v1.0")
-    print("    convert playgrounds to markdown")
-    print("usage: playme path_to_playground (--toc)")
+    print("playme - convert playgrounds to markdown")
     print("")
-    print("--toc       prints a GitHub compatible TOC at the start")
+    print("usage: playme path_to_playground [--toc [--toc-top]] [--no-credits]")
+    print("")
+    print("--toc          generate a GitHub compatible TOC at the beginning of the document")
+    print("--toc-top      generate back to top links before relevant headers")
+    print("--no-credits   prevent appending credits text at the end")
+    print("")
+    print("visit https://github.com/BenziAhamed/playme")
+    print("")
     exit(0)
 }
 
@@ -32,6 +37,7 @@ let command = CommandLine.arguments.joined(separator: " ")
 let debugEnabled = command.contains(" --debug")
 let skipConversion = command.contains(" --skip")
 let generateTOC = command.contains(" --toc")
+let generateTOCtopLinks = command.contains(" --toc-top")
 let noCredits = command.contains(" --no-credits")
 
 func debug(_ message: @autoclosure () -> String) {
@@ -191,12 +197,33 @@ enum Token {
 
 var tocEntries = [TocEntry]()
 
-func checkTocEntry(_ token: Token) {
-    guard let tocEntry = token.text.getTocEntry() else { return }
+func checkTocEntry(_ token: Token) -> TocEntry? {
+    guard let tocEntry = token.text.getTocEntry() else { return nil }
     tocEntries.append(tocEntry)
+    return tocEntry
 }
 
 var tocInsertionPointDiscovered = false
+var veryFirstHeaderScanned = false
+
+func addBackToTopLink(_ token: Token, _ tokens: inout [Token]) {
+    guard generateTOC, generateTOCtopLinks else { return }
+    let generateHeaderBeforeLevel = 2
+    guard let entry = checkTocEntry(token), entry.level <= generateHeaderBeforeLevel else { return }
+    if !veryFirstHeaderScanned { 
+        // skip first time when we reach the first generateHeaderBeforeLevel
+        // because it will be more likely at the top
+        if entry.level == generateHeaderBeforeLevel {
+            veryFirstHeaderScanned = true 
+        }
+    }
+    else {     
+        tokens.append(Token.markdownLine("\n"))
+        tokens.append(Token.markdownLine("[top](#contents)"))
+        tokens.append(Token.markdownLine("****"))
+        tokens.append(Token.markdownLine("\n"))
+    }
+}
 
 func convertToMarkdown(file: String) -> [String] {
 
@@ -223,8 +250,8 @@ func convertToMarkdown(file: String) -> [String] {
         // standalone line
         if !inMarkdownBlock && line.hasPrefix("//:") {
             let token = Token.markdownLine(line)
+            addBackToTopLink(token, &tokens)
             tokens.append(token)
-            checkTocEntry(token)
         }
         else if line.hasPrefix("/*:") {
             tokens.append(.markdownBlockStart)
@@ -241,8 +268,8 @@ func convertToMarkdown(file: String) -> [String] {
         else {
             if inMarkdownBlock {
                 let token = Token.markdownBlockLine(line)
+                addBackToTopLink(token, &tokens)
                 tokens.append(token)
-                checkTocEntry(token)
             }
             else {
                 tokens.append(.code(line))
