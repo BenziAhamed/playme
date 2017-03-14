@@ -25,9 +25,21 @@ playme will print converted markdown to the terminal. Redirect its output to a f
 ./playme.swift path_to_your_playground > README.md
 ```
 
-### Extras
+## Usage
 
-#### TOC generation
+```
+  usage: playme path_to_playground [--toc [--toc-top]] [--no-credits]
+
+  --toc          generate a GitHub compatible TOC at the beginning of the document
+  --toc-top      generate back to top links before relevant headers
+  --no-credits   prevent appending credits text at the end
+```
+
+## Extras
+
+
+
+### TOC generation
 You can pass in `--toc` to generate a table of contents compatible with GitHub.
 
 ```sh
@@ -40,6 +52,6 @@ If you wish to control more precisely where the TOC should be created, add `{{GE
 
 > Only one TOC block will be generated, so placing multiple `{{GEN:TOC}}`s will have no effect, only the first one will be considered.
 
-#### Anti Credit Union
+### Anti Credit Union
 Disable appending a credits line at the end by passing in `--no-credits`.
 
