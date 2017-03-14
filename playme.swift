@@ -6,43 +6,59 @@
 //
 //  Created by Benzi on 11/03/17.
 //  Copyright © 2017 Benzi Ahamed.
-//  
+//
 //  License: https://github.com/BenziAhamed/playme/blob/master/LICENSE
 
 
 import Foundation
+import Cocoa
+
+let url = "https://github.com/BenziAhamed/playme"
+let remoteFileUrl = "https://raw.githubusercontent.com/BenziAhamed/playme/master/playme.swift"
 
 func error(_ message: @autoclosure () -> String) -> Never  {
     print("error: ", message())
     exit(-1)
 }
 
-// validate usage
-
-if CommandLine.arguments.count == 1 {
+func printUsage() {
     print("playme - convert playgrounds to markdown")
     print("")
-    print("usage: playme path_to_playground [--toc [--toc-top]] [--no-credits]")
+    print("usage: playme path_to_playground [--toc [--toc-top]] [--no-credits] [update [--check]]")
     print("")
     print("--toc          generate a GitHub compatible TOC at the beginning of the document")
     print("--toc-top      generate back to top links before relevant headers")
     print("--no-credits   prevent appending credits text at the end")
     print("")
-    print("visit https://github.com/BenziAhamed/playme")
+    print("update         updates playme to the latest version")
+    print("--check        run update availability checks, but does not update")
+    print("")
+    print("--help         prints usage")
+    print("")
+    print("visit \(url)")
     print("")
     exit(0)
 }
+
 
 let command = CommandLine.arguments.joined(separator: " ")
 let debugEnabled = command.contains(" --debug")
 let skipConversion = command.contains(" --skip")
 let generateTOC = command.contains(" --toc")
 let generateTOCtopLinks = command.contains(" --toc-top")
-let noCredits = command.contains(" --no-credits")
+let showCredits = !command.contains(" --no-credits")
+let doUpdate = command.contains(" update")
+let updateCheck = command.contains(" --check")
+let helpUser = command.contains(" --help")
+
+
+if CommandLine.arguments.count == 1 || helpUser {
+    printUsage()
+}
 
 func debug(_ message: @autoclosure () -> String) {
     guard debugEnabled else { return }
-    print("[DEBUG]", message())
+    print("⚙️ [DEBUG]", message())
 }
 
 func doDebug(actions: () -> ()) {
@@ -50,12 +66,65 @@ func doDebug(actions: () -> ()) {
     actions()
 }
 
-// validate input file
+
+// MARK:- update
+if doUpdate {
+    print("checking for updates...")
+    func fail(_ message:String) -> Never {
+        print(message)
+        exit(-1)
+    }
+    func MD5(_ string: String) -> String {
+        let t = Process()
+        t.launchPath = "/sbin/md5"
+        t.arguments = ["-q", "-s", string]
+        t.standardOutput = Pipe()
+        t.launch()
+        guard let standardOutput = t.standardOutput as? Pipe else { fail("MD5: unable to compute") }
+        let outData = standardOutput.fileHandleForReading.readDataToEndOfFile()
+        var outBytes = [UInt8](repeating:0, count:outData.count)
+        outData.copyBytes(to: &outBytes, count: outData.count)
+        guard let outString = String(bytes: outBytes, encoding: String.Encoding.ascii) else { fail("MD5: unable to compute") }
+        return outString.trimmingCharacters(in: .newlines)
+    }
+    do {
+        guard let remoteURL = URL(string: remoteFileUrl) else { fail("unable to check for updates") }
+        let remoteData = try Data(contentsOf: remoteURL)
+        guard let remoteContents = String.init(data: remoteData, encoding: .utf8) else { fail("") }
+        let remoteMD5 = MD5(remoteContents)
+        let localURL = URL.init(fileURLWithPath: CommandLine.arguments[0])
+        let localData = try Data(contentsOf: localURL)
+        guard let localContents = String.init(data: localData, encoding: .utf8) else { fail("") }
+        let localMD5 = MD5(localContents)
+        if remoteMD5 != localMD5 {
+            if updateCheck {
+                print("a new version is available for download")
+            }
+            else {
+                print("downloading update...")
+                try remoteData.write(to: localURL, options: Data.WritingOptions.atomic)
+                print("playme upated!")
+            }
+        }
+        else {
+            print("you already have the latest version")
+        }
+    } catch {
+        fail("unable to \(updateCheck ? "check for update" : "update")")
+    }
+    exit(0)
+}
+
+
+let fm = FileManager.default
+
+
+// MARK:- validate input file
 
 var playground = CommandLine.arguments[1]
 
 let contentsXML = playground + "/contents.xcplayground"
-let fm = FileManager.default
+
 
 func validateInput(file: String) {
     
@@ -71,7 +140,7 @@ func validateInput(file: String) {
 
 validateInput(file: playground)
 
-// get source files to process
+// MARK:- get source files to process
 
 func getSourceFiles() -> [String] {
     let e = error
@@ -123,7 +192,7 @@ extension String {
         }
         return self
     }
-
+    
 }
 
 
@@ -137,7 +206,7 @@ extension String {
         guard
             let regex = try? NSRegularExpression.init(pattern: "^(\\s*)(#+)", options: .caseInsensitive),
             let match = regex.firstMatch(in: self, options: .withoutAnchoringBounds, range: .init(location: 0, length: characters.count))
-        else { return nil }
+            else { return nil }
         let level = match.rangeAt(2).length
         let header = substring(from: index(startIndex, offsetBy: match.range.length))
         return TocEntry(level: level, text: header)
@@ -210,14 +279,14 @@ func addBackToTopLink(_ token: Token, _ tokens: inout [Token]) {
     guard generateTOC, generateTOCtopLinks else { return }
     let generateHeaderBeforeLevel = 2
     guard let entry = checkTocEntry(token), entry.level <= generateHeaderBeforeLevel else { return }
-    if !veryFirstHeaderScanned { 
+    if !veryFirstHeaderScanned {
         // skip first time when we reach the first generateHeaderBeforeLevel
         // because it will be more likely at the top
         if entry.level == generateHeaderBeforeLevel {
-            veryFirstHeaderScanned = true 
+            veryFirstHeaderScanned = true
         }
     }
-    else {     
+    else {
         tokens.append(Token.markdownLine("\n"))
         tokens.append(Token.markdownLine("[top](#contents)"))
         tokens.append(Token.markdownLine("****"))
@@ -226,7 +295,7 @@ func addBackToTopLink(_ token: Token, _ tokens: inout [Token]) {
 }
 
 func convertToMarkdown(file: String) -> [String] {
-
+    
     let data = fm.contents(atPath: file)!
     let contents = String.init(data: data, encoding: String.Encoding.utf8)!
     
@@ -235,9 +304,9 @@ func convertToMarkdown(file: String) -> [String] {
     
     // determine the kind of line
     // we are looking at
-
+    
     for line in contents.components(separatedBy: "\n") {
-
+        
         if !tocInsertionPointDiscovered {
             tocInsertionPointDiscovered = line.contains("{{GEN:TOC}}")
         }
@@ -246,7 +315,7 @@ func convertToMarkdown(file: String) -> [String] {
         if line.contains("(@previous)") || line.contains("(@next)") {
             continue
         }
-
+        
         // standalone line
         if !inMarkdownBlock && line.hasPrefix("//:") {
             let token = Token.markdownLine(line)
@@ -257,7 +326,7 @@ func convertToMarkdown(file: String) -> [String] {
             tokens.append(.markdownBlockStart)
             inMarkdownBlock = true
         }
-        // very basic end block detection
+            // very basic end block detection
         else if line == "*/" || line == " */" || line == "  */" {
             tokens.append(.markdownBlockEnd)
             inMarkdownBlock = false
@@ -284,7 +353,7 @@ func convertToMarkdown(file: String) -> [String] {
         tokens.removeLast()
     }
     tokens.append(.newline)
-
+    
     doDebug {
         debug("-------------")
         debug("FILE: \(file)")
@@ -294,7 +363,7 @@ func convertToMarkdown(file: String) -> [String] {
         }
         debug("END TOKENS -------------")
     }
-
+    
     enum BlockType {
         case markdown(start:Int, end:Int)
         case code(start:Int, end:Int)
@@ -360,7 +429,7 @@ func convertToMarkdown(file: String) -> [String] {
     }
     
     let blocks = findBlocks(tokens: tokens)
-
+    
     doDebug {
         debug("BLOCKS -------------")
         blocks.forEach {
@@ -398,7 +467,7 @@ sourceFiles.forEach { allConvertedLines.append(contentsOf: convertToMarkdown(fil
 
 
 
-// print toc at beginning only if we have no specific 
+// print toc at beginning only if we have no specific
 // insertion location
 
 var tocPrinted = false
@@ -407,7 +476,7 @@ func printTOC() {
     guard tocEntries.count > 0 else { return }
     guard !tocPrinted else  { return }
     tocPrinted = true
-
+    
     print("# Contents")
     tocEntries.forEach { tocEntry in
         let headingBulletLevel = String.init(repeating: " ", count: 4 * (tocEntry.level-1))
@@ -423,8 +492,8 @@ if !tocInsertionPointDiscovered || (skipConversion && generateTOC) {
 }
 
 guard !skipConversion else { exit(0) }
-    
-allConvertedLines.forEach { 
+
+allConvertedLines.forEach {
     if $0 == "\n" {
         print($0, separator: "", terminator: "")
     }
@@ -432,11 +501,11 @@ allConvertedLines.forEach {
         printTOC()
     }
     else {
-        print($0) 
+        print($0)
     }
 }
 
-if !noCredits {
-    print("> This README was auto-generated using [playme](https://github.com/BenziAhamed/playme)")
+if showCredits {
+    print("> This README was auto-generated using [playme](\(url))")
 }
 
