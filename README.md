@@ -1,6 +1,9 @@
 # playme
 Convert Swift Playgrounds to Markdown
 
+## Example
+
+This [readme](https://github.com/BenziAhamed/Tracery) was generated using playme.
 
 ## Installation
 
