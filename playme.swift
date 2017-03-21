@@ -301,6 +301,7 @@ func convertToMarkdown(file: String) -> [String] {
     
     var tokens = [Token]()
     var inMarkdownBlock = false
+    var inMarkdownCodeBlock = false
     
     // determine the kind of line
     // we are looking at
@@ -314,6 +315,10 @@ func convertToMarkdown(file: String) -> [String] {
         // skip special lines
         if line.contains("(@previous)") || line.contains("(@next)") {
             continue
+        }
+        
+        if line.hasPrefix("```") && inMarkdownBlock {
+            inMarkdownCodeBlock = !inMarkdownCodeBlock
         }
         
         // standalone line
@@ -330,6 +335,7 @@ func convertToMarkdown(file: String) -> [String] {
         else if line == "*/" || line == " */" || line == "  */" {
             tokens.append(.markdownBlockEnd)
             inMarkdownBlock = false
+            inMarkdownCodeBlock = false
         }
         else if line == "" {
             tokens.append(.newline)
@@ -337,7 +343,9 @@ func convertToMarkdown(file: String) -> [String] {
         else {
             if inMarkdownBlock {
                 let token = Token.markdownBlockLine(line)
-                addBackToTopLink(token, &tokens)
+                if !inMarkdownCodeBlock {
+                    addBackToTopLink(token, &tokens)
+                }
                 tokens.append(token)
             }
             else {
